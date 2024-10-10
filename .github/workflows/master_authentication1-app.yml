@@ -53,5 +53,4 @@ jobs:
       - name: Deploy to Azure Function App
         run: |
           source venv/bin/activate
-          az functionapp list --query "[].name"
-          func azure functionapp publish authentication1-app --python
+          func azure functionapp publish authapp1 --python
