@@ -1,7 +1,6 @@
 import os
 import json
 import logging
-import logging
 import base64
 import datetime
 import jwt
@@ -35,10 +34,6 @@ async def register(req: func.HttpRequest) -> func.HttpResponse:
         req (func.HttpRequest): The incoming HTTP request containing user data.
 
     Returns:
-        JSON response with the created user, or error response if validation fails.
-    """
-    logging.info("Register function triggered.")
-
         func.HttpResponse: A JSON response indicating the result of the operation.
                            - 202 Accepted if registration is in process.
                            - 409 Conflict if the username or email already exists.
