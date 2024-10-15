@@ -1,16 +1,17 @@
 import os
 import hashlib
 import re
+import logging
 from azure.data.tables import TableServiceClient
 
 # Use AzureWebJobsStorage connection string from environment variables
 connection_string = os.getenv("AzureWebJobsStorage")
-TABLE_NAME = "Users"
+USERS_TABLE = "Users"
 # QUEUE_NAME = "user-registration-queue"
 
 # Connect to the Azure Table Storage
 table_service = TableServiceClient.from_connection_string(conn_str=connection_string)
-table_client = table_service.get_table_client(table_name=TABLE_NAME)
+user_table_client = table_service.get_table_client(table_name=USERS_TABLE)
 
 def validate_json(data, *fields):
     """Validate if required fields are present in the request JSON."""
@@ -23,14 +24,19 @@ def hash_password(password):
     """Hash the password using SHA256."""
     return hashlib.sha256(password.encode()).hexdigest()
 
+def is_valid_email(email):
+    """Validate the email format using a regular expression."""
+    email_regex = r'^[a-zA-Z0-9_.+-]{3,}@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$'
+    return re.match(email_regex, email) is not None
 
-def user_exists(username: str):
+def user_exists(username: str, email: str = None):
     """
-    Check if a user exists in the 'Users' table by their username (RowKey).
+    Check if a user exists in the 'Users' table by their username (RowKey) and email.
     If the user exists, fetch and return the PartitionKey along with the user data.
 
     Args:
         username (str): The username of the user to check.
+        email (str): The email of the user to check. (optional)
 
     Returns:
         tuple: (True, PartitionKey, user_data) if the user exists, 
@@ -38,26 +44,32 @@ def user_exists(username: str):
     """
 
     try:
-        # Query the Users table for the specified username
-        user_entity = table_client.get_entity(partition_key="Users", row_key=username)
+        # Query the Users table for the specified username and email
+        if email:
+            query_filter = f"RowKey eq '{username}' or email eq '{email}'"
+        else:
+            query_filter = f"RowKey eq '{username}'"
+        user_entities = user_table_client.query_entities(query_filter)
 
         # If the user exists, prepare user data and return
-        user_data = {
-            'username': user_entity['RowKey'],  # assuming RowKey is username
-            'email': user_entity['email'],
-            'first_name': user_entity['first_name'],
-            'last_name': user_entity['last_name'],
-            # Password should not be returned for security reasons
-        }
-        return True, user_entity['PartitionKey'], user_data
+        for user_entity in user_entities:
+            if user_entity['is_deleted']:
+                return False, None, None
+            user_data = {
+                'username': user_entity['RowKey'],  # assuming RowKey is username
+                'email': user_entity['email'],
+                'first_name': user_entity['first_name'],
+                'last_name': user_entity['last_name'],
+                # Password should not be returned for security reasons
+            }
+            return True, user_entity['PartitionKey'], user_data
+
+        # If no user is found, return False and None
+        return False, None, None
 
     except Exception as e:
-        # If the user does not exist, return False and None
-        if "ResourceNotFound" in str(e):
-            return False, None, None
-        else:
-            # For any other exception, raise it
-            raise e
+        # For any exception, raise it
+        raise e
         
         
 def check_password(username: str, user_input_password: str):
@@ -74,13 +86,16 @@ def check_password(username: str, user_input_password: str):
     """
     try:
         # Query the Users table for the specified username
-        user_entity = table_client.get_entity(partition_key="Users", row_key=username)
+        query_filter = f"RowKey eq '{username}'"
+        user_entities = user_table_client.query_entities(query_filter)
 
-        # Fetch the stored password hash from the user entity
-        stored_password_hash = user_entity['password']  # Assuming the hashed password is stored as 'password'
+        # Fetch the first matching user entity
+        user_entity = next(user_entities, None)
 
-        # Compare the stored hash with the hash of the user input password
-        return stored_password_hash == hash_password(user_input_password)
+        if user_entity:
+            # Fetch the stored password hash from the user entity and Compare the stored hash with the hash of the user input password
+            stored_password_hash = user_entity['password']  # Assuming the hashed password is stored as 'password'
+            return stored_password_hash == hash_password(user_input_password)
 
     except Exception as e:
         # Handle exceptions (e.g., user not found)
@@ -131,15 +146,3 @@ def validate_password(password: str) -> bool:
 
     return True
 
-
-# async def initialize_database():
-#     """Initialize the database by creating the Users table if it doesn't exist."""
-#     try:
-#         # Create the Users table
-#         await table_service.create_table("Users")
-#         print("Users table initialized.")
-#     except ResourceExistsError:
-#         # The table already exists
-#         print("Users table already exists.")
-#     except Exception as e:
-#         print(f"Failed to initialize database: {str(e)}")
