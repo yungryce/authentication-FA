@@ -96,14 +96,19 @@ async def process_user_logout(message):
     """Process user logout from the HTTP request."""
 
     blacklist_entity = {
-        'RowKey': message['token'],  # Using token as RowKey
+        "PartitionKey": message['username'],
+        'RowKey': message['token'],
         'active': message['active']
     }
 
     try:
         # Check if token exists in the blacklist table
-        existing_entity = blacklist_client.get_entity(row_key=blacklist_entity['RowKey'])
-        if existing_entity['token'] == blacklist_entity['token']:
+        existing_entity = blacklist_client.get_entity(
+            partition_key=blacklist_entity['PartitionKey'],
+            row_key=blacklist_entity['RowKey']
+        )
+        logging.warning(f"exist|: {existing_entity['RowKey']}, {existing_entity['PartitionKey']}, {existing_entity['active']}")
+        if existing_entity['RowKey'] == blacklist_entity['RowKey']:
             # Update the 'active' field with the returned value
             existing_entity['active'] = blacklist_entity['active']
             blacklist_client.update_entity(entity=existing_entity)
@@ -112,3 +117,5 @@ async def process_user_logout(message):
             logging.warning(f"Token mismatch for user {message['token']}.")
     except Exception as e:
         logging.error(f"Failed to logout user {message['token']}: {str(e)}")
+
+

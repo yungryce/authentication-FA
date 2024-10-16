@@ -4,7 +4,7 @@ import logging
 import base64
 import datetime
 import jwt
-import uuid
+from guard import authenticate
 from helper_functions import validate_json, user_exists, check_password, validate_password, table_service, is_valid_email, hash_password
 import azure.functions as func
 from queue_triggers import bp
@@ -213,6 +213,7 @@ async def login(req: func.HttpRequest) -> func.HttpResponse:
 
 @app.function_name(name="logout")
 @app.route(route="logout", methods=["POST"])
+@authenticate
 async def logout(req: func.HttpRequest) -> func.HttpResponse:
     """
     User logout function for Azure Table Storage.
@@ -243,7 +244,7 @@ async def logout(req: func.HttpRequest) -> func.HttpResponse:
         }
 
         # Send the logout data to the logout queue
-        queue_client = queue_service_client.get_queue_client("logout-queue")  # Define your logout queue name
+        queue_client = queue_service_client.get_queue_client(ACTION_QUEUE)  # Define your logout queue name
         encoded_message = base64.b64encode(json.dumps(logout_data).encode('utf-8')).decode('utf-8')
         queue_client.send_message(encoded_message)
 

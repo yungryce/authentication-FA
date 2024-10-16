@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 echo "Registering a new user..."
-curl -v -X POST "http://localhost:7071/api/register" \
+curl POST "http://localhost:7071/api/register" \
      -H "Content-Type: application/json" \
      -d '{
            "username": "testuser",
@@ -15,7 +15,7 @@ sleep 3
 echo -e "\n"
 
 echo "Logging in with valid credentials..."
-curl -v -X POST "http://localhost:7071/api/login" \
+curl POST "http://localhost:7071/api/login" \
      -H "Content-Type: application/json" \
      -d '{
            "username": "testuser",

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 echo "Registering a new user..."
-curl -v -X POST "http://localhost:7071/api/register" \
+curl POST "http://localhost:7071/api/register" \
      -H "Content-Type: application/json" \
      -d '{
            "username": "testuser",
@@ -25,18 +25,21 @@ curl -v -X POST "http://localhost:7071/api/login" \
 sleep 1
 echo -e "\n"
 
+token=$(echo "$login_response" | jq -r '.token')
+
 echo "Logging out..."
-curl -v -X POST "http://localhost:7071/api/logout" \
-     -H "Content-Type: application/json" \
-     -d '{
-           "username": "testuser"
-         }'
+curl -v POST "http://localhost:7071/api/logout" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $token" \
+  -d '{
+     "username": "testuser"
+      }'
 
 sleep 1
 echo -e "\n"
 
 echo "Trying to login again after logout..."
-curl -v -X POST "http://localhost:7071/api/login" \
+curl POST "http://localhost:7071/api/login" \
      -H "Content-Type: application/json" \
      -d '{
            "username": "testuser",
