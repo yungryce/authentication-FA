@@ -31,6 +31,10 @@ async def process_user_action(msg: func.QueueMessage) -> None:
         await process_user_login(message)
     elif  action == 'logout':
         await process_user_logout(message)
+    elif action == 'delete_user':
+        await process_user_deletion(message)
+    elif action == 'update_expired_tokens':
+        await update_expired_tokens(message)
     else:
         logging.warning(f"Unknown action: {action}")
 
@@ -107,7 +111,6 @@ async def process_user_logout(message):
             partition_key=blacklist_entity['PartitionKey'],
             row_key=blacklist_entity['RowKey']
         )
-        logging.warning(f"exist|: {existing_entity['RowKey']}, {existing_entity['PartitionKey']}, {existing_entity['active']}")
         if existing_entity['RowKey'] == blacklist_entity['RowKey']:
             # Update the 'active' field with the returned value
             existing_entity['active'] = blacklist_entity['active']
@@ -119,3 +122,53 @@ async def process_user_logout(message):
         logging.error(f"Failed to logout user {message['token']}: {str(e)}")
 
 
+async def process_user_deletion(message):
+    """Process user deletion from the queue and update the user record."""
+
+    username = message['username']
+    
+    try:
+        # Fetch the user entity
+        try:
+            user_entity = user_client.get_entity(partition_key=username, row_key=username)
+        except ResourceNotFoundError:
+            logging.error(f"User {username} not found in the table.")
+            return
+        
+        # Mark the user as deleted
+        user_entity['is_deleted'] = True
+        user_client.update_entity(entity=user_entity)
+        logging.info(f"User {message['username']} marked as deleted.")
+
+        # Query and delete tokens from the blacklist
+        entities_to_delete = blacklist_client.query_entities(query_filter=f"PartitionKey eq '{username}'")
+        if not entities_to_delete:
+            logging.info(f"No tokens found for user {username} in the blacklist.")
+        
+        for entity in entities_to_delete:
+            blacklist_client.delete_entity(partition_key=username, row_key=entity['RowKey'])
+            logging.info("Deleted token from blacklist for user: %s, token: %s", username, entity['RowKey'])
+
+    except Exception as e:
+        logging.error(f"Failed to delete user {message['username']}: {str(e)}")
+
+
+async def update_expired_token(message):
+    """Update an expired token by marking it as inactive in the Blacklist table."""
+    username = message['username']
+    token = message['token']
+    
+    try:
+        blacklist_client = table_service.get_table_client(table_name="Blacklist")
+        
+        # Retrieve and update the token
+        token_entity = blacklist_client.get_entity(partition_key=username, row_key=token)
+        token_entity['active'] = False
+        blacklist_client.update_entity(entity=token_entity)
+        
+        logging.info(f"Marked token {token} for user {username} as inactive.")
+    
+    except ResourceNotFoundError:
+        logging.warning(f"Token {token} for user {username} not found in blacklist.")
+    except Exception as e:
+        logging.error(f"Failed to update expired token for user {username}: {str(e)}")

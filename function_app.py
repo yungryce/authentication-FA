@@ -20,6 +20,10 @@ queue_service_client = QueueServiceClient.from_connection_string(conn_str=connec
 user_client = table_service.get_table_client(table_name=USERS_TABLE)
 # BLACKLIST = "Blacklist"
 # blacklist_client = table_service.get_table_client(table_name=BLACKLIST)
+# Retrieve the connection string from environment variables
+email_storage_connection_string = os.getenv('EMAIL_STORAGE_CONNECTION_STRING')
+queue_service_client_email = QueueServiceClient.from_connection_string(email_storage_connection_string)
+email_queue_client = queue_service_client_email.get_queue_client("emailqueue")
 
 # Initialize the function app
 app = func.FunctionApp()
@@ -98,13 +102,18 @@ async def register(req: func.HttpRequest) -> func.HttpResponse:
         queue_client = queue_service_client.get_queue_client(ACTION_QUEUE)
         encoded_message = base64.b64encode(json.dumps(user_data).encode('utf-8')).decode('utf-8')
         queue_client.send_message(encoded_message)
-        
         logging.info("User registration data sent to queue: %s", user_data)
+
+        user_data.pop('password', None)
+        encoded_email = base64.b64encode(json.dumps(user_data).encode('utf-8')).decode('utf-8')
+        email_queue_client.send_message(encoded_email)
+        logging.info(f"Email queue message sent for {username} registration to email function app storage.")
+
         return func.HttpResponse(json.dumps({"message": "User registration successful"}), status_code=202)
     except Exception as e:
-        logging.error("Failed to send message to the queue: %s", str(e))
+        logging.error("Failed to send message to the action queue or email queue: %s", str(e))
         return func.HttpResponse(
-            json.dumps({"error": "Failed to send message to the queue", "message": str(e)}),
+            json.dumps({"error": "Failed to process the registration", "message": str(e)}),
             status_code=500
         )
 
@@ -191,6 +200,11 @@ async def login(req: func.HttpRequest) -> func.HttpResponse:
             encoded_message = base64.b64encode(json.dumps(queue_data).encode('utf-8')).decode('utf-8')
             queue_client.send_message(encoded_message)
 
+            user_data['action'] = 'login'
+            encoded_email = base64.b64encode(json.dumps(user_data).encode('utf-8')).decode('utf-8')
+            email_queue_client.send_message(encoded_email)
+            logging.info(f"Email queue message sent for {username} registration to email function app storage.")
+
             # Include the token in the response headers
             headers = {
                 'Authorization': f'Bearer {token}'  # Adding Authorization header
@@ -247,6 +261,17 @@ async def logout(req: func.HttpRequest) -> func.HttpResponse:
         queue_client = queue_service_client.get_queue_client(ACTION_QUEUE)  # Define your logout queue name
         encoded_message = base64.b64encode(json.dumps(logout_data).encode('utf-8')).decode('utf-8')
         queue_client.send_message(encoded_message)
+
+        # Prepare and send data to the email queue
+        logout_data.pop('token', None)  # Exclude sensitive data
+        logout_data.update({
+            'first_name': current_user['first_name'],
+            'last_name': current_user['last_name'],
+            'email': current_user['email']
+        })
+        encoded_email = base64.b64encode(json.dumps(logout_data).encode('utf-8')).decode('utf-8')
+        email_queue_client.send_message(encoded_email)
+        logging.info(f"Email queue message sent for {username} registration to email function app storage.")
 
         return func.HttpResponse(json.dumps({"message": "Logout successful."}), status_code=200)
     except Exception as e:
@@ -353,12 +378,14 @@ async def get_all_users(req: func.HttpRequest) -> func.HttpResponse:
 
 @app.function_name(name="delete_user")
 @app.route(route="delete_user/{username}", methods=["DELETE"])
+@authenticate
 async def delete_user(req: func.HttpRequest) -> func.HttpResponse:
     """
-    Mark a user as deleted in the Azure Table Storage.
+    Mark a user as deleted in the Azure Table Storage and remove them from the blacklist.
 
     This function checks if the specified user exists in the Azure Table Storage.
-    If the user is found, it updates the user's data to mark them as deleted and returns a success message.
+    If the user is found, it updates the user's data to mark them as deleted and deletes
+    all occurrences of the user in the blacklist table, then returns a success message.
     If not, it returns a message indicating that the user was not found.
 
     Args:
@@ -371,25 +398,38 @@ async def delete_user(req: func.HttpRequest) -> func.HttpResponse:
                            - 500 Internal Server Error if an error occurs during deletion.
     """
     
-    username = req.route_params.get("username")
+    # Fetch authenticated data from the request
+    current_user = req.user
+    username = current_user['username']
     logging.info("Attempting to delete user: %s", username)
-    
-    # Check if the user exists
-    exists, partition_key, user_data = user_exists(username)
 
-    if exists:
-        try:
-            # Update the user's data to mark them as deleted
-            user_data['is_deleted'] = True
-            user_client.update_entity(partition_key=partition_key, row_key=username, entity={'is_deleted': user_data['is_deleted']})
-            logging.info("User   marked as deleted successfully: %s", username)
-            return func.HttpResponse(json.dumps({"message": "User   marked as deleted successfully."}), status_code=200)
-        except Exception as e:
-            logging.error(f"Error marking user '{username}' as deleted: {str(e)}")
-            return func.HttpResponse(
-                json.dumps({"error": "Failed to mark user as deleted", "message": str(e)}),
-                status_code=500
-            )
-    else:
-        logging.warning("User not found for deletion: %s", username)
-        return func.HttpResponse(json.dumps({"error": "User   not found."}), status_code=404)
+    user_data = {
+        'username': username,   
+        'action': 'delete_user'
+    }
+    
+    try:
+        # Send delete operation to the queue
+        encoded_message = base64.b64encode(json.dumps(user_data).encode('utf-8')).decode('utf-8')
+        queue_client = queue_service_client.get_queue_client(ACTION_QUEUE)
+        queue_client.send_message(encoded_message)
+        logging.info("User deletion message sent to queue for: %s", username)
+        
+        # Prepare and send data to the email queue
+        user_data.update({
+            'first_name': current_user['first_name'],
+            'last_name': current_user['last_name'],
+            'email': current_user['email'],
+        })
+        encoded_email = base64.b64encode(json.dumps(user_data).encode('utf-8')).decode('utf-8')
+        email_queue_client.send_message(encoded_email)
+        logging.info(f"Email queue message sent for {username} deletion to email function app storage.")
+        
+        return func.HttpResponse(json.dumps({"message": "User marked as deleted successfully."}), status_code=200)
+    except Exception as e:
+        logging.error(f"Error marking user '{username}' as deleted: {str(e)}")
+        return func.HttpResponse(
+            json.dumps({"error": "Failed to mark user as deleted", "message": str(e)}),
+            status_code=500
+        )
+
