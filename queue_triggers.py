@@ -12,10 +12,8 @@ from azure.core.exceptions import ResourceNotFoundError
 # Create a blueprint for queue triggers
 bp = func.Blueprint() 
 
-USERS_TABLE = "Users"
-BLACKLIST = "Blacklist"
-user_client = table_service.get_table_client(table_name=USERS_TABLE)
-blacklist_client = table_service.get_table_client(table_name=BLACKLIST)
+user_client = table_service.get_table_client(table_name="Users")
+blacklist_client = table_service.get_table_client(table_name="Blacklist")
 
 @bp.function_name(name="process_user_action")
 @bp.queue_trigger(arg_name="msg", queue_name="user-action-queue", connection="AzureWebJobsStorage")
@@ -34,7 +32,7 @@ async def process_user_action(msg: func.QueueMessage) -> None:
     elif action == 'delete_user':
         await process_user_deletion(message)
     elif action == 'update_expired_tokens':
-        await update_expired_tokens(message)
+        await update_expired_token(message)
     else:
         logging.warning(f"Unknown action: {action}")
 
@@ -49,6 +47,9 @@ async def process_user_registration(message):
         'password': message['password'],  # Store hashed password in production
         'first_name': message['first_name'],
         'last_name': message['last_name'],
+        'ip_address': message['ip_address'],
+        'email_token': message['email_token'],
+        'confirm_email': False,
         'is_deleted': False
     }
         
@@ -172,3 +173,5 @@ async def update_expired_token(message):
         logging.warning(f"Token {token} for user {username} not found in blacklist.")
     except Exception as e:
         logging.error(f"Failed to update expired token for user {username}: {str(e)}")
+        
+

@@ -5,29 +5,29 @@ import base64
 import datetime
 import jwt
 from guard import authenticate
-from helper_functions import validate_json, user_exists, check_password, validate_password, table_service, is_valid_email, hash_password
+from helper_functions import validate_json, user_exists, check_password, validate_password, table_service, is_valid_email, hash_password, update_user_ip, generate_confirmation_token, confirm_email
+from rate_limiting import is_rate_limited, is_ip_rate_limited
 import azure.functions as func
 from queue_triggers import bp
+from active_cron_trigger import cp
 from azure.storage.queue import QueueServiceClient
 
 
 # Create the QueueServiceClient and Define the queue client for your specific queue
 ACTION_QUEUE = "user-action-queue"
 SECRET_KEY = os.getenv("SECRET_KEY")
-USERS_TABLE = "Users"
+
 connection_string = os.getenv("AzureWebJobsStorage")
-queue_service_client = QueueServiceClient.from_connection_string(conn_str=connection_string)
-user_client = table_service.get_table_client(table_name=USERS_TABLE)
-# BLACKLIST = "Blacklist"
-# blacklist_client = table_service.get_table_client(table_name=BLACKLIST)
-# Retrieve the connection string from environment variables
 email_storage_connection_string = os.getenv('EMAIL_STORAGE_CONNECTION_STRING')
+user_client = table_service.get_table_client(table_name="Users")
+queue_service_client = QueueServiceClient.from_connection_string(conn_str=connection_string)
 queue_service_client_email = QueueServiceClient.from_connection_string(email_storage_connection_string)
 email_queue_client = queue_service_client_email.get_queue_client("emailqueue")
 
 # Initialize the function app
 app = func.FunctionApp()
 app.register_functions(bp) 
+app.register_functions(cp)
 
 @app.function_name(name="register")
 @app.route(route="register", methods=["POST"])
@@ -62,6 +62,10 @@ async def register(req: func.HttpRequest) -> func.HttpResponse:
     
     username = data['username']
     email = data['email']
+    identifiers = [username, email]
+    
+    # Capture user's IP address
+    user_ip = req.headers.get("X-Forwarded-For", req.headers.get("REMOTE_ADDR", "unknown"))
 
     # Validate email format
     if not is_valid_email(email):
@@ -70,6 +74,23 @@ async def register(req: func.HttpRequest) -> func.HttpResponse:
             json.dumps({"error": "Invalid email format"}),
             status_code=400
         )
+
+    # Check rate limiting for both username and email
+    for identifier in identifiers:
+        if is_rate_limited(identifier):
+            return func.HttpResponse(
+                json.dumps({'error': 'Too many requests. Please try again later.'}),
+                status_code=429  # Too Many Requests
+            )
+
+    # Check IP rate limiting
+    user_ip = req.headers.get("X-Forwarded-For", req.headers.get("REMOTE_ADDR", "unknown"))
+    if is_ip_rate_limited(user_ip):
+        return func.HttpResponse(
+            json.dumps({'error': 'Too many requests from this IP. Please try again later.'}),
+            status_code=429  # Too Many Requests
+        )
+
 
     # Check if the user exists and prepare user data
     user_exists_result, partition_key, user_data = user_exists(username, email)
@@ -87,6 +108,7 @@ async def register(req: func.HttpRequest) -> func.HttpResponse:
             json.dumps({"error": "Password does not meet requirements"}),
             status_code=400
         )
+    
     # Prepare user_data with values from the request
     user_data = {
         'username': username,
@@ -94,6 +116,8 @@ async def register(req: func.HttpRequest) -> func.HttpResponse:
         'first_name': data['first_name'],
         'last_name': data['last_name'],
         'password': hash_password(data['password']),
+        'ip_address': [user_ip],  # Store the IP address as a list
+        'email_token': generate_confirmation_token(),
         'action': 'signup'
     }
     
@@ -103,7 +127,7 @@ async def register(req: func.HttpRequest) -> func.HttpResponse:
         encoded_message = base64.b64encode(json.dumps(user_data).encode('utf-8')).decode('utf-8')
         queue_client.send_message(encoded_message)
         logging.info("User registration data sent to queue: %s", user_data)
-
+        
         user_data.pop('password', None)
         encoded_email = base64.b64encode(json.dumps(user_data).encode('utf-8')).decode('utf-8')
         email_queue_client.send_message(encoded_email)
@@ -154,11 +178,39 @@ async def login(req: func.HttpRequest) -> func.HttpResponse:
         username = data['username']
         password = data['password']
         
+        # Check if the user's email is confirmed
+        if not await confirm_email(username):
+            return func.HttpResponse(
+                json.dumps({"error": "Email not confirmed. Please verify your email."}),
+                status_code=401
+            )
+        
+        # Capture user's IP address
+        ip_address = req.headers.get('X-Forwarded-For', req.headers.get('Remote-Addr', 'Unknown IP'))
+        
         # Check if the user exists and validate the password
         exists, partition_key, user_data = user_exists(username)
+        
+        # Check rate limiting for both username and email
+        if is_rate_limited(username):
+            return func.HttpResponse(
+                json.dumps({'error': 'Too many requests. Please try again later.'}),
+                status_code=429  # Too Many Requests
+            )
+
+        # Check IP rate limiting
+        user_ip = req.headers.get("X-Forwarded-For", req.headers.get("REMOTE_ADDR", "unknown"))
+        if is_ip_rate_limited(user_ip):
+            return func.HttpResponse(
+                json.dumps({'error': 'Too many requests from this IP. Please try again later.'}),
+                status_code=429  # Too Many Requests
+            )
 
         if exists and check_password(username, password):
             logging.info("Login successful for user: %s", username)
+            
+            # Update the user's IP address
+            await update_user_ip(username, ip_address)
             
             # Check if the user has an active token in the Blacklist table
             try:
@@ -433,3 +485,222 @@ async def delete_user(req: func.HttpRequest) -> func.HttpResponse:
             status_code=500
         )
 
+
+@app.function_name(name="verify_email")
+@app.route(route="verify_email", methods=["POST"])
+async def verify_email(req: func.HttpRequest) -> func.HttpResponse:
+    """
+    Confirm the user's email address by validating the provided email token.
+
+    This function retrieves the email token sent to the user's email and, if valid, sets the 'confirm_email' field to True in the Users table.
+
+    Args:
+        req (func.HttpRequest): The incoming HTTP request containing the email token.
+
+    Returns:
+        func.HttpResponse: A JSON response indicating success or failure of email confirmation.
+    """
+    try:
+        # Parse request data
+        data = req.get_json()
+
+        # Validate the presence of the email_token in the request body
+        error = validate_json(data, 'email_token')
+        if error:
+            return func.HttpResponse(json.dumps({"error": "Missing or invalid email_token"}), status_code=400)
+
+        email_token = data['email_token']
+        
+        # Find the user associated with the provided email_token
+        try:
+            # Query to find user by the email_token
+            query_filter = f"email_token eq '{email_token}'"
+            user_entities = user_client.query_entities(query_filter=query_filter)
+            
+            # Check if any user entity is found
+            user_entity = next(user_entities, None)
+            if not user_entity:
+                return func.HttpResponse(
+                    json.dumps({"error": "Invalid or expired token."}),
+                    status_code=400
+                )
+            
+            # Check if email is already confirmed
+            if user_entity.get('confirm_email', False):
+                return func.HttpResponse(
+                    json.dumps({"message": "Email is already confirmed."}),
+                    status_code=200
+                )
+            
+            # Set the confirm_email field to True
+            user_entity['confirm_email'] = True
+
+            # Update the user entity in the Users table
+            user_client.update_entity(entity=user_entity, mode="Replace")
+            logging.info(f"Email confirmation successful for user: {user_entity['RowKey']}")
+
+            return func.HttpResponse(
+                json.dumps({"message": "Email confirmed successfully."}),
+                status_code=200
+            )
+        
+        except StopIteration:
+            # No matching entity found
+            return func.HttpResponse(
+                json.dumps({"error": "Invalid email token."}),
+                status_code=400
+            )
+        except Exception as e:
+            logging.error(f"Error confirming email: {str(e)}")
+            return func.HttpResponse(
+                json.dumps({"error": "Internal server error", "message": str(e)}),
+                status_code=500
+            )
+
+    except Exception as e:
+        logging.error(f"Error processing email confirmation request: {str(e)}")
+        return func.HttpResponse(
+            json.dumps({"error": "Internal server error", "message": str(e)}),
+            status_code=500
+        )
+        
+
+@app.function_name(name="forgot_password")
+@app.route(route="forgot_password", methods=["POST"])
+async def forgot_password(req: func.HttpRequest) -> func.HttpResponse:
+    """
+    Forgot password HTTP trigger that generates a password reset token.
+    Updates the email_token field in the Users table and sets confirm_email to False.
+    
+    Args:
+        req (func.HttpRequest): The incoming HTTP request containing the email.
+    
+    Returns:
+        func.HttpResponse: A JSON response indicating the result of the token generation.
+    """
+    try:
+        # Parse request body
+        data = req.get_json()
+
+        # Validate the input JSON (should contain 'email')
+        error = validate_json(data, 'email')
+        if error:
+            logging.warning("Validation error: %s", error)
+            return func.HttpResponse(json.dumps(error), status_code=error[1])
+
+        email = data['email']
+        
+        # Check if the user exists using email (or username if desired)
+        user_exists_flag, partition_key, user_data = user_exists(username=None, email=email)
+        
+        if not user_exists_flag:
+            logging.warning(f"User with email '{email}' not found.")
+            return func.HttpResponse(
+                json.dumps({"error": "User not found with the provided email."}),
+                status_code=404
+            )
+
+        # Generate the confirmation token
+        email_token = generate_confirmation_token(email)
+
+        # Update the user entity: set email_token and confirm_email to False
+        query_filter = f"email eq '{email}'"
+        user_entities = user_client.query_entities(query_filter=query_filter)
+        user_entity = next(user_entities, None)
+
+        if user_entity:
+            user_entity['email_token'] = email_token
+            user_entity['confirm_email'] = False
+
+            user_client.update_entity(entity=user_entity)
+            logging.info(f"Password reset token generated for email: {email}")
+            
+            # Create a queue message to send an email
+            message = {
+                "action": "forgot_password",
+                "email": email,
+                "email_token": email_token
+            }
+            
+            # Initialize queue client and add message to queue
+            queue_service_client_email.send_message(json.dumps(message))
+
+            logging.info(f"Password reset token generated and email sent for {email}")
+
+
+            # Send response (you may want to trigger an email sending function here)
+            return func.HttpResponse(
+                json.dumps({"message": "Password reset token generated. Please check your email."}),
+                status_code=200
+            )
+        else:
+            return func.HttpResponse(
+                json.dumps({"error": "User entity not found after lookup."}),
+                status_code=404
+            )
+
+    except Exception as e:
+        logging.error(f"Error generating password reset token for email '{email}': {str(e)}")
+        return func.HttpResponse(
+            json.dumps({"error": "Internal server error", "message": str(e)}),
+            status_code=500
+        )
+
+
+
+@app.function_name(name="change_password")
+@app.route(route="change_password", methods=["POST"])
+@authenticate
+async def change_password(req: func.HttpRequest) -> func.HttpResponse:
+    """
+    Change user password function for Azure Table Storage.
+
+    This function verifies the old password, and if valid, updates the user's password to a new one.
+
+    Args:
+        req (func.HttpRequest): The incoming HTTP request containing old and new passwords.
+
+    Returns:
+        func.HttpResponse: A JSON response indicating the result of the password change attempt.
+                           - 200 OK if password is successfully changed.
+                           - 401 Unauthorized if the old password is incorrect.
+                           - 400 Bad Request if validation fails.
+    """
+    logging.info("User password change attempt.")
+    
+    try:
+        # Parse input data
+        data = req.get_json()
+
+        # Validate input JSON
+        error = validate_json(data, 'old_password', 'new_password')
+        if error:
+            return func.HttpResponse(json.dumps(error), status_code=error[1])
+        
+        username = req.user['username']  # Assume username is available in request after authentication
+        old_password = data['old_password']
+        new_password = data['new_password']
+        
+        # Use check_password function to verify the old password
+        if not check_password(username, old_password):
+            logging.warning("Old password does not match for user: %s", username)
+            return func.HttpResponse(json.dumps({"error": "Incorrect old password."}), status_code=401)
+
+        # Hash the new password and update in the Users table
+        hashed_new_password = hash_password(new_password)
+
+        # Update user entity
+        user_entity = user_client.get_entity(partition_key=username, row_key=username)
+        user_entity['password'] = hashed_new_password
+
+        user_client.update_entity(entity=user_entity)
+        logging.info(f"Password updated successfully for user: {username}")
+
+        return func.HttpResponse(json.dumps({"message": "Password changed successfully."}), status_code=200)
+
+    except Exception as e:
+        logging.error(f"Error changing password for user '{username}': {str(e)}")
+        return func.HttpResponse(
+            json.dumps({"error": "Internal server error", "message": str(e)}),
+            status_code=500
+        )

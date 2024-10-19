@@ -2,16 +2,18 @@ import os
 import hashlib
 import re
 import logging
+import random
+import string
 from azure.data.tables import TableServiceClient
+from azure.core.exceptions import ResourceNotFoundError
+
 
 # Use AzureWebJobsStorage connection string from environment variables
 connection_string = os.getenv("AzureWebJobsStorage")
-USERS_TABLE = "Users"
-# QUEUE_NAME = "user-registration-queue"
 
 # Connect to the Azure Table Storage
 table_service = TableServiceClient.from_connection_string(conn_str=connection_string)
-user_table_client = table_service.get_table_client(table_name=USERS_TABLE)
+user_table_client = table_service.get_table_client(table_name="Users")
 
 def validate_json(data, *fields):
     """Validate if required fields are present in the request JSON."""
@@ -70,7 +72,78 @@ def user_exists(username: str, email: str = None):
     except Exception as e:
         # For any exception, raise it
         raise e
+    
+
+async def update_user_ip(username: str, ip_address: str):
+    """
+    Update the user's IP address in the Users table.
+
+    This function retrieves the user's current IP address list, ensures it contains only the last 4 IP addresses,
+    appends a new IP address, and keeps the total number of IP addresses to 5.
+
+    Args:
+        username (str): The username of the user.
+        ip_address (str): The new IP address to be added.
+    """
+
+    try:
+        user_entity = user_table_client.get_entity(partition_key=username, row_key=username)
+
+        # Ensure the ip_address field is a list
+        if 'ip_address' not in user_entity:
+            user_entity['ip_address'] = []
+
+        # If the IP address is not already in the list, append it
+        if ip_address not in user_entity['ip_address']:
+            # Keep only the last 4 IP addresses in the list
+            user_entity['ip_address'].append(ip_address)
+
+            # Ensure the total number of IP addresses does not exceed 5
+            if len(user_entity['ip_address']) > 5:
+                user_entity['ip_address'] = user_entity['ip_address'][-5:]
+
+            user_table_client.update_entity(entity=user_entity)
+            logging.info(f"Updated IP address for user {username}: {ip_address}")
+        else:
+            logging.info(f"IP address {ip_address} already exists for user {username}.")
+
+    except ResourceNotFoundError:
+        logging.warning(f"User {username} not found in the Users table.")
+    except Exception as e:
+        logging.error(f"Error updating IP address for user {username}: {str(e)}")
+
+
+
+async def ip_checker(username: str, ip_address: str):
+    """
+    Check if the provided IP address is in the user's list of allowed IP addresses.
+
+    Args:
+        username (str): The username of the user.
+        ip_address (str): The IP address to check.
+
+    Returns:
+        bool: True if the IP address is allowed, False otherwise.
+    """
+    user_client = table_service.get_table_client(table_name="Users")
+
+    try:
+        user_entity = user_client.get_entity(partition_key=username, row_key=username)
         
+        # Ensure the ip_address field is a list
+        if 'ip_address' in user_entity:
+            return ip_address in user_entity['ip_address']
+        else:
+            return False  # No IP addresses are stored for the user
+
+    except ResourceNotFoundError:
+        logging.warning(f"User {username} not found in the Users table.")
+        return False
+    except Exception as e:
+        logging.error(f"Error checking IP address for user {username}: {str(e)}")
+        return False
+
+    
         
 def check_password(username: str, user_input_password: str):
     """
@@ -94,7 +167,7 @@ def check_password(username: str, user_input_password: str):
 
         if user_entity:
             # Fetch the stored password hash from the user entity and Compare the stored hash with the hash of the user input password
-            stored_password_hash = user_entity['password']  # Assuming the hashed password is stored as 'password'
+            stored_password_hash = user_entity['password']
             return stored_password_hash == hash_password(user_input_password)
 
     except Exception as e:
@@ -146,3 +219,49 @@ def validate_password(password: str) -> bool:
 
     return True
 
+
+def generate_confirmation_token(length=6):
+    """
+    Generates a random confirmation token.
+
+    The token consists of uppercase letters, lowercase letters, digits, 
+    and allowed special characters.
+
+    Args:
+        length (int): The length of the token to be generated. Default is 6.
+
+    Returns:
+        str: A randomly generated token of the specified length.
+    """
+    # Define the character pool for the token
+    allowed_characters = string.ascii_uppercase + string.ascii_lowercase + string.digits + "!@#$%^&*"
+    
+    # Randomly select characters from the allowed pool
+    token = ''.join(random.choice(allowed_characters) for _ in range(length))
+    
+    return token
+
+
+async def confirm_email(username: str) -> bool:
+    """
+    Check if the user's email is confirmed.
+
+    Args:
+        username (str): The username of the user.
+
+    Returns:
+        bool: True if the email is confirmed, False otherwise.
+    """
+    try:
+        # Fetch user from the Users table
+        user_entity = user_table_client.get_entity(partition_key=username, row_key=username)
+        
+        # Check if the confirm_email field exists and is True
+        return user_entity.get('confirm_email', False)
+
+    except ResourceNotFoundError:
+        logging.warning(f"User {username} not found in the Users table.")
+        return False
+    except Exception as e:
+        logging.error(f"Error checking confirm_email for user {username}: {str(e)}")
+        return False

@@ -1,6 +1,6 @@
 import asyncio
 from functools import wraps
-from helper_functions import table_service
+from helper_functions import table_service, ip_checker, confirm_email
 from azure.core.exceptions import ResourceNotFoundError
 import json
 import jwt
@@ -58,6 +58,21 @@ def authenticate(func):
             if not username:
                 return HttpResponse(
                     json.dumps({'error': 'Token is invalid (no username found)'}),
+                    status_code=401
+                )
+                
+            # Check if the user's email is confirmed
+            if not await confirm_email(username):
+                return HttpResponse(
+                    json.dumps({'error': 'Email not confirmed. Please verify your email.'}),
+                    status_code=401
+                )
+                
+            # Check if the IP address is allowed
+            ip_address = req.headers.get("X-Forwarded-For", req.headers.get("REMOTE_ADDR"))  # Get IP address
+            if not await ip_checker(username, ip_address):
+                return HttpResponse(
+                    json.dumps({'error': 'IP address not authorized, re-login to update'}),
                     status_code=401
                 )
 
