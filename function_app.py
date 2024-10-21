@@ -62,10 +62,6 @@ async def register(req: func.HttpRequest) -> func.HttpResponse:
     
     username = data['username']
     email = data['email']
-    identifiers = [username, email]
-    
-    # Capture user's IP address
-    user_ip = req.headers.get("X-Forwarded-For", req.headers.get("REMOTE_ADDR", "unknown"))
 
     # Validate email format
     if not is_valid_email(email):
@@ -76,6 +72,7 @@ async def register(req: func.HttpRequest) -> func.HttpResponse:
         )
 
     # Check rate limiting for both username and email
+    identifiers = [username, email]
     for identifier in identifiers:
         if is_rate_limited(identifier):
             return func.HttpResponse(
@@ -90,7 +87,6 @@ async def register(req: func.HttpRequest) -> func.HttpResponse:
             json.dumps({'error': 'Too many requests from this IP. Please try again later.'}),
             status_code=429  # Too Many Requests
         )
-
 
     # Check if the user exists and prepare user data
     user_exists_result, partition_key, user_data = user_exists(username, email)
@@ -110,6 +106,8 @@ async def register(req: func.HttpRequest) -> func.HttpResponse:
         )
     
     # Prepare user_data with values from the request
+    email_token, token_expires_at = generate_confirmation_token()
+
     user_data = {
         'username': username,
         'email': email,
@@ -117,7 +115,8 @@ async def register(req: func.HttpRequest) -> func.HttpResponse:
         'last_name': data['last_name'],
         'password': hash_password(data['password']),
         'ip_address': [user_ip],  # Store the IP address as a list
-        'email_token': generate_confirmation_token(),
+        'email_token': email_token,
+        'token_expires_at': token_expires_at,
         'action': 'signup'
     }
     
@@ -429,7 +428,7 @@ async def get_all_users(req: func.HttpRequest) -> func.HttpResponse:
 
 
 @app.function_name(name="delete_user")
-@app.route(route="delete_user/{username}", methods=["DELETE"])
+@app.route(route="delete_user", methods=["DELETE"])
 @authenticate
 async def delete_user(req: func.HttpRequest) -> func.HttpResponse:
     """
@@ -453,7 +452,7 @@ async def delete_user(req: func.HttpRequest) -> func.HttpResponse:
     # Fetch authenticated data from the request
     current_user = req.user
     username = current_user['username']
-    logging.info("Attempting to delete user: %s", username)
+    logging.info(f"Attempting to delete user: %s", username)
 
     user_data = {
         'username': username,   
@@ -487,7 +486,7 @@ async def delete_user(req: func.HttpRequest) -> func.HttpResponse:
 
 
 @app.function_name(name="verify_email")
-@app.route(route="verify_email", methods=["POST"])
+@app.route(route="verify_email/{username}", methods=["POST"])
 async def verify_email(req: func.HttpRequest) -> func.HttpResponse:
     """
     Confirm the user's email address by validating the provided email token.
@@ -502,6 +501,7 @@ async def verify_email(req: func.HttpRequest) -> func.HttpResponse:
     """
     try:
         # Parse request data
+        username = req.route_params.get('username')
         data = req.get_json()
 
         # Validate the presence of the email_token in the request body
@@ -514,16 +514,28 @@ async def verify_email(req: func.HttpRequest) -> func.HttpResponse:
         # Find the user associated with the provided email_token
         try:
             # Query to find user by the email_token
-            query_filter = f"email_token eq '{email_token}'"
+            query_filter = f"PartitionKey eq '{username}' and email_token eq '{email_token}'"
             user_entities = user_client.query_entities(query_filter=query_filter)
             
             # Check if any user entity is found
             user_entity = next(user_entities, None)
             if not user_entity:
                 return func.HttpResponse(
-                    json.dumps({"error": "Invalid or expired token."}),
+                    json.dumps({"error": "Invalid Token. Please request a new token."}),
                     status_code=400
                 )
+
+            # Check if token has expired
+            token_expires_at = user_entity.get('token_expires_at')
+            if token_expires_at:
+                expiration_time = datetime.datetime.fromisoformat(token_expires_at)
+                current_time = datetime.datetime.utcnow()
+
+                if current_time > expiration_time:
+                    return func.HttpResponse(
+                        json.dumps({"error": "Token has expired."}),
+                        status_code=400
+                    )
             
             # Check if email is already confirmed
             if user_entity.get('confirm_email', False):
@@ -536,7 +548,7 @@ async def verify_email(req: func.HttpRequest) -> func.HttpResponse:
             user_entity['confirm_email'] = True
 
             # Update the user entity in the Users table
-            user_client.update_entity(entity=user_entity, mode="Replace")
+            user_client.update_entity(entity=user_entity)
             logging.info(f"Email confirmation successful for user: {user_entity['RowKey']}")
 
             return func.HttpResponse(
@@ -601,7 +613,7 @@ async def forgot_password(req: func.HttpRequest) -> func.HttpResponse:
             )
 
         # Generate the confirmation token
-        email_token = generate_confirmation_token(email)
+        email_token, token_expires_at = generate_confirmation_token()
 
         # Update the user entity: set email_token and confirm_email to False
         query_filter = f"email eq '{email}'"
@@ -619,7 +631,8 @@ async def forgot_password(req: func.HttpRequest) -> func.HttpResponse:
             message = {
                 "action": "forgot_password",
                 "email": email,
-                "email_token": email_token
+                "email_token": email_token,
+                "token_expires_at": token_expires_at
             }
             
             # Initialize queue client and add message to queue

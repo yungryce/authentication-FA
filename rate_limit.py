@@ -1,6 +1,6 @@
 import datetime
 from collections import defaultdict
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 # rate_limits = defaultdict(list)  # Tracks requests per identifier
 # In-memory store for rate limiting (this will reset on function app restarts)
@@ -22,7 +22,7 @@ def is_rate_limited(identifier: str) -> bool:
     MAX_REQUESTS = 5  # Max requests allowed per time window
     TIME_WINDOW = 60  # Time window in seconds
 
-    current_time = datetime.datetime.now()
+    current_time = datetime.now()
     
     # If identifier is not in rate_limits, initialize an empty list
     if identifier not in rate_limits:
@@ -54,7 +54,7 @@ def is_ip_rate_limited(ip_address: str) -> bool:
     Returns:
         bool: True if the IP address is rate limited, False otherwise.
     """
-    IP_MAX_REQUESTS = 10  # Max requests allowed per time window
+    IP_MAX_REQUESTS = 4  # Max requests allowed per time window
     IP_TIME_WINDOW = 60  # Time window in seconds
     current_time = datetime.now()
 

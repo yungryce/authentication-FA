@@ -4,6 +4,7 @@ import re
 import logging
 import random
 import string
+from datetime import datetime, timedelta
 from azure.data.tables import TableServiceClient
 from azure.core.exceptions import ResourceNotFoundError
 
@@ -220,7 +221,7 @@ def validate_password(password: str) -> bool:
     return True
 
 
-def generate_confirmation_token(length=6):
+def generate_confirmation_token(length=6, expires_in=1):
     """
     Generates a random confirmation token.
 
@@ -238,8 +239,11 @@ def generate_confirmation_token(length=6):
     
     # Randomly select characters from the allowed pool
     token = ''.join(random.choice(allowed_characters) for _ in range(length))
+
+    # Set expiration time (current time + expires_in hours)
+    expiration_time = datetime.utcnow() + timedelta(hours=expires_in)
     
-    return token
+    return token, expiration_time.isoformat()
 
 
 async def confirm_email(username: str) -> bool:
