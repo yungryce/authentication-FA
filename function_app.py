@@ -6,7 +6,7 @@ import datetime
 import jwt
 from guard import authenticate
 from helper_functions import validate_json, user_exists, check_password, validate_password, table_service, is_valid_email, hash_password, update_user_ip, generate_confirmation_token, confirm_email
-from rate_limiting import is_rate_limited, is_ip_rate_limited
+from rate_limit import is_rate_limited, is_ip_rate_limited
 import azure.functions as func
 from queue_triggers import bp
 from active_cron_trigger import cp
