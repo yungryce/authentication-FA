@@ -25,14 +25,16 @@ curl -v -X POST "http://localhost:7071/api/login" \
 sleep 1
 echo -e "\n"
 
-token=$(echo "$login_response" | jq -r '.token')
+# token=$(echo "$login_response" | jq -r '.token')
 
 echo "Logging out..."
-curl -v POST "http://localhost:7071/api/logout" \
+token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjaHhnYngiLCJpYXQiOjE3Mjk1ODYzODYsImV4cCI6MTcyOTY3Mjc4Nn0.TVBbQx8Mgd5ya05Cod5OvdeYHKBiZplOU1Wzhtq2HRc
+curl POST "http://localhost:7071/api/logout" \
   -H "Content-Type: application/json" \
+  -H "X-Forwarded-For: 192.168.1.1" \
   -H "Authorization: Bearer $token" \
   -d '{
-     "username": "testuser"
+     "username": "chxgbx"
       }'
 
 sleep 1

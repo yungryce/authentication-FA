@@ -129,22 +129,22 @@ for i in {1..6}; do
     -H "Content-Type: application/json" \
     -H "X-Forwarded-For: 192.168.1.1" \
     -d '{
-        "username": "unaqueuser",
-        "email": "tetuser@example.com",
+        "username": "chxgbx",
+        "email": "chigbujoshua@yahoo.com",
         "password": "Password123!",
-        "first_name": "Test",
-        "last_name": "User"
+        "first_name": "Chigbu",
+        "last_name": "Joshua"
     }'
     sleep 3
 done
 
 
-curl -X POST "http://localhost:7071/api/register" \
-     -H "Content-Type: application/json" \
-     -d '{
-           "username": "chxgbx",
-           "password": "testP@ssword9",
-           "email": "yungryce@yahoo.com",
-           "first_name": "Test",
-           "last_name": "User"
-         }'
+# curl -X POST "http://localhost:7071/api/register" \
+#      -H "Content-Type: application/json" \
+#      -d '{
+#            "username": "chxgbx",
+#            "password": "testP@ssword9",
+#            "email": "yungryce@yahoo.com",
+#            "first_name": "Test",
+#            "last_name": "User"
+#          }'
