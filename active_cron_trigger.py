@@ -14,7 +14,8 @@ blacklist_client = table_service.get_table_client(table_name="Blacklist")
 
 
 @cp.function_name(name="cleanup_expired_tokens")
-# @cp.timer_trigger(schedule="0 0 0 * * *", arg_name="mytimer", run_on_startup=False)  # 12 AM UTC+1 (0:00 AM UTC)
+@cp.timer_trigger(schedule="0 0 0 * * *", arg_name="mytimer", run_on_startup=False)  # 12 AM UTC+1 (0:00 AM UTC)
+# @cp.timer_trigger(schedule="0 */5 * * * *", arg_name="mytimer", run_on_startup=False)  # 12 AM UTC+1 (0:00 AM UTC)
 async def cleanup_expired_tokens(mytimer: func.TimerRequest) -> None:
     """Delete non-active tokens from the Blacklist table."""
     try:

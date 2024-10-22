@@ -47,8 +47,9 @@ async def process_user_registration(message):
         'password': message['password'],  # Store hashed password in production
         'first_name': message['first_name'],
         'last_name': message['last_name'],
-        'ip_address': message['ip_address'],
+        'ip_address': ','.join(message['ip_address']),  # Convert list to string
         'email_token': message['email_token'],
+        'token_expires_at': message['token_expires_at'],
         'confirm_email': False,
         'is_deleted': False
     }

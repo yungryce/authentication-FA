@@ -95,12 +95,56 @@ curl -X POST "$BASE_URL/register" \
 echo -e "\n"
 
 
+# Test rate limiting by sending multiple requests with the same username
+for i in {1..5}; do
+    curl -X POST "$BASE_URL/register" \
+    -H "Content-Type: application/json" \
+    -d '{
+        "username": "testuser",
+        "email": "testuser@example.com",
+        "password": "Password123!",
+        "first_name": "Test",
+        "last_name": "User"
+    }'
+done
+
+# Test rate limiting by sending multiple requests with the same email
+for i in {1..5}; do
+    curl -X POST "$BASE_URL/register" \
+    -H "Content-Type: application/json" \
+    -d '{
+        "username": "uniqueuser",
+        "email": "testuser@example.com",
+        "password": "Password123!",
+        "first_name": "Test",
+        "last_name": "User"
+    }'
+done
+
+
+# Test IP rate limiting by sending multiple requests from the same IP
+BASE_URL="http://localhost:7071/api"
+for i in {1..6}; do
+    curl -X POST "$BASE_URL/register" \
+    -H "Content-Type: application/json" \
+    -H "X-Forwarded-For: 192.168.1.1" \
+    -d '{
+        "username": "chxgbx",
+        "email": "chigbujoshua@yahoo.com",
+        "password": "Password123!",
+        "first_name": "Chigbu",
+        "last_name": "Joshua"
+    }'
+    sleep 3
+done
+
+
 # curl -X POST "http://localhost:7071/api/register" \
 #      -H "Content-Type: application/json" \
 #      -d '{
-#            "username": "testuser",
+#            "username": "chxgbx",
 #            "password": "testP@ssword9",
-#            "email": "testuser@example.com",
+#            "email": "yungryce@yahoo.com",
 #            "first_name": "Test",
 #            "last_name": "User"
 #          }'
