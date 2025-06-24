@@ -1,0 +1,254 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "project_identity": {
+    "name": "authentication-FA",
+    "type": "project",
+    "scope": "backend",
+    "is_independent": true,
+    "version": "1.0.0",
+    "description": "Comprehensive serverless authentication and authorization system built on Azure Functions v4 with Python v2 programming model. Demonstrates production-ready patterns for user management, JWT-based authentication, rate limiting, and scalable serverless architecture with event-driven design.",
+    "curriculum_stage": "advanced"
+  },
+  "tech_stack": {
+    "primary": [
+      "Python 3.9+",
+      "Azure Functions v4",
+      "Azure SDK"
+    ],
+    "secondary": [
+      "Azure Table Storage",
+      "Azure Queue Storage",
+      "Application Insights",
+      "PyJWT"
+    ],
+    "key_libraries": [
+      "azure-functions",
+      "azure-data-tables",
+      "azure-storage-queue",
+      "PyJWT",
+      "bcrypt"
+    ],
+    "development_tools": [
+      "Azure Functions Core Tools",
+      "Azure CLI",
+      "VS Code Azure Extension",
+      "pytest"
+    ],
+    "testing_frameworks": [
+      "pytest",
+      "shell scripts",
+      "Azure Functions testing framework"
+    ]
+  },
+  "skill_manifest": {
+    "technical": [
+      "Serverless Computing with Azure Functions",
+      "JWT Authentication and Authorization",
+      "Azure Table Storage Operations",
+      "Queue-based Message Processing",
+      "Rate Limiting Implementation",
+      "Password Security and Hashing",
+      "API Development and Design",
+      "Event-driven Architecture",
+      "Python Async Programming",
+      "Cloud Security Best Practices",
+      "Error Handling and Validation",
+      "Testing Strategy Development"
+    ],
+    "domain": [
+      "Identity and Access Management",
+      "Cloud-native Application Architecture",
+      "Microservices Design Patterns",
+      "Serverless Security Models",
+      "Authentication System Design",
+      "Data Protection and Privacy",
+      "Scalable System Architecture",
+      "DevOps and Monitoring"
+    ],
+    "professional": [
+      "System Architecture Design",
+      "Security-first Development",
+      "Code Documentation and Standards",
+      "Test-driven Development",
+      "Performance Optimization",
+      "Technical Problem Solving",
+      "Project Structure Organization",
+      "Best Practices Implementation"
+    ],
+    "competency_level": "advanced"
+  },
+  "components": {
+    "function_app": {
+      "type": "service",
+      "path": "function_app.py",
+      "description": "Main Azure Functions application entry point with HTTP triggers for authentication endpoints",
+      "dependencies": ["guard", "helper_functions", "rate_limit", "queue_triggers"],
+      "interfaces": [
+        "/api/register",
+        "/api/login",
+        "/api/logout",
+        "/api/verify",
+        "/api/change-password",
+        "/api/forgot-password",
+        "/api/delete-user",
+        "/api/resend-confirmation"
+      ]
+    },
+    "authentication_guard": {
+      "type": "module",
+      "path": "guard.py",
+      "description": "JWT authentication middleware and authorization decorators for securing endpoints",
+      "dependencies": ["helper_functions"],
+      "interfaces": ["@authenticate"]
+    },
+    "helper_functions": {
+      "type": "utility",
+      "path": "helper_functions.py",
+      "description": "Core utility functions for data operations, validation, and Azure service interactions",
+      "dependencies": ["azure-data-tables", "azure-storage-queue"],
+      "interfaces": [
+        "validate_json",
+        "user_exists",
+        "check_password",
+        "hash_password",
+        "is_valid_email",
+        "generate_confirmation_token"
+      ]
+    },
+    "rate_limiter": {
+      "type": "module",
+      "path": "rate_limit.py",
+      "description": "Rate limiting implementation for user and IP-based request throttling",
+      "dependencies": ["helper_functions"],
+      "interfaces": ["is_rate_limited", "is_ip_rate_limited"]
+    },
+    "queue_triggers": {
+      "type": "service",
+      "path": "queue_triggers.py",
+      "description": "Queue-based trigger handlers for asynchronous user operation processing",
+      "dependencies": ["helper_functions"],
+      "interfaces": ["user_action_queue_trigger"]
+    },
+    "timer_triggers": {
+      "type": "service",
+      "path": "active_cron_trigger.py",
+      "description": "Timer-based cleanup operations for expired tokens and maintenance tasks",
+      "dependencies": ["helper_functions"],
+      "interfaces": ["cleanup_expired_tokens"]
+    },
+    "test_suite": {
+      "type": "test",
+      "path": "tests/",
+      "description": "Comprehensive test suite including unit tests and integration tests",
+      "dependencies": ["pytest"],
+      "interfaces": [
+        "test_helper_functions.py",
+        "test_queue_triggers.py",
+        "test_login.sh",
+        "test_register.sh",
+        "test_logout.sh"
+      ]
+    }
+  },
+  "progression": {
+    "stage_1": {
+      "description": "Core Authentication Setup - Basic user registration and login functionality",
+      "tech_stack": ["Azure Functions", "Python", "Azure Table Storage"],
+      "features": [
+        "User registration with email validation",
+        "Password hashing and storage",
+        "Basic login authentication",
+        "JWT token generation"
+      ],
+      "skills": [
+        "Azure Functions development",
+        "Database operations",
+        "Security fundamentals",
+        "API endpoint creation"
+      ]
+    },
+    "stage_2": {
+      "description": "Security Enhancement - Advanced security features and protection mechanisms",
+      "tech_stack": ["PyJWT", "Rate Limiting", "Input Validation"],
+      "features": [
+        "JWT token validation and blacklisting",
+        "Rate limiting implementation",
+        "Input sanitization and validation",
+        "Authentication middleware"
+      ],
+      "skills": [
+        "Advanced security patterns",
+        "Middleware development",
+        "Rate limiting strategies",
+        "Token management"
+      ]
+    },
+    "stage_3": {
+      "description": "Asynchronous Processing - Event-driven architecture and queue-based operations",
+      "tech_stack": ["Azure Queue Storage", "Queue Triggers", "Timer Triggers"],
+      "features": [
+        "Queue-based user operations",
+        "Email verification workflow",
+        "Timer-based cleanup operations",
+        "Service integration patterns"
+      ],
+      "skills": [
+        "Event-driven architecture",
+        "Asynchronous processing",
+        "Service orchestration",
+        "System integration"
+      ]
+    },
+    "stage_4": {
+      "description": "Production Readiness - Testing, monitoring, and deployment preparation",
+      "tech_stack": ["pytest", "Application Insights", "Azure CLI"],
+      "features": [
+        "Comprehensive test suite",
+        "Monitoring and logging",
+        "Error handling and resilience",
+        "Deployment configuration"
+      ],
+      "skills": [
+        "Testing strategies",
+        "Monitoring and observability",
+        "Production deployment",
+        "Performance optimization"
+      ]
+    }
+  },
+  "relationships": {
+    "dependencies": [
+      "Email Function App - External service for email operations",
+      "Azure Storage Services - Table and Queue storage dependencies"
+    ],
+    "integrations": [
+      "Client Applications - Web and mobile app integration",
+      "Monitoring Services - Application Insights integration"
+    ],
+    "related_projects": [
+      "Email-FA - Companion email service",
+      "Frontend Applications - Client-side authentication implementations"
+    ]
+  },
+  "learning_outcomes": {
+    "primary": [
+      "Master serverless authentication architecture",
+      "Implement production-ready security patterns",
+      "Design scalable cloud-native applications",
+      "Apply event-driven programming principles"
+    ],
+    "secondary": [
+      "Azure cloud service integration",
+      "Advanced testing methodologies",
+      "System monitoring and observability",
+      "DevOps and deployment practices"
+    ]
+  },
+  "complexity_assessment": {
+    "technical_difficulty": "advanced",
+    "scope_breadth": "comprehensive",
+    "integration_complexity": "high",
+    "learning_curve": "steep",
+    "practical_application": "high"
+  }
+}

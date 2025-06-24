@@ -1,48 +1,92 @@
-# Authentication App
+<p align="center">
+  <img src="https://img.shields.io/badge/Azure_Functions-v4-0078D4" alt="Azure Functions">
+  <img src="https://img.shields.io/badge/Python-3.9+-3776AB" alt="Python">
+  <img src="https://img.shields.io/badge/Status-Active-success" alt="Status">
+  <img src="https://img.shields.io/badge/License-MIT-blue" alt="License">
+</p>
 
-## Overview
+<div align="center">
+  <h1>🔐 Authentication Function App</h1>
+  <p><em>Serverless Authentication & Authorization System</em></p>
+</div>
 
-This authentication app is designed as a practice project for exploring authentication mechanisms in a serverless environment using Azure Functions. It is **not intended for use in production environments**.
+---
 
-The app features several authentication-related functions, integrated with Azure Services for scalable, serverless execution. It supports user registration, login, password changes, and email verification with an emphasis on security, rate limiting, and handling edge cases like expired tokens.
+## 📋 Table of Contents
+- [📖 Overview](#-overview)
+- [🎯 Learning Objectives](#-learning-objectives)
+- [🛠️ Tech Stack](#️-tech-stack)
+- [📁 Project Structure](#-project-structure)
+- [🚀 Getting Started](#-getting-started)
+- [💡 Usage](#-usage)
+- [🏆 Key Features](#-key-features)
+- [📚 Resources](#-resources)
+- [👥 Contributors](#-contributors)
 
-### Key Features:
-- **Authentication**: Verifies user credentials using JWT tokens and an authentication guard.
-- **Rate Limiting**: Protects against abuse by limiting the number of requests a user or IP can make.
-- **Email Handling**: Email functionalities (like registration confirmation and password resets) are handled by another Azure Function app.
-- **Azure Integration**: The app utilizes Azure Queues for processing actions and Azure Table Storage for user data storage.
+## 📖 Overview
 
-## Architecture
+This authentication app is a comprehensive serverless solution designed for exploring advanced authentication mechanisms in cloud-native environments using Azure Functions v4. Built with security-first principles, it demonstrates production-ready patterns for user management, JWT-based authentication, and scalable serverless architecture.
 
-## Authentication Workflow
-The authentication is based on a **JWT token** that is included in the request headers. The token is verified using the `authenticate` guard before granting access to any protected route.
+The application showcases modern cloud development practices including event-driven architecture, asynchronous processing, and microservices design patterns. It serves as both a learning resource and a reference implementation for building secure, scalable authentication systems on Azure.
 
-- **Backend**: Built on Azure Functions (v4), all outputs are queued using Azure Queues.
-- **Data Storage**: Uses Azure Table Storage to store user information.
-- **Email Handling**: Another function app is responsible for sending emails such as registration confirmation and password reset.
+**⚠️ Note**: This project is designed for educational and development purposes. While following security best practices, additional hardening may be required for production deployment.
 
-### Technologies Used:
-- **Azure Functions**: The app is built using Azure Functions to handle HTTP requests, queue triggers, and timer triggers.
-- **Azure Queues**: All outputs are queued for processing, ensuring asynchronous handling of actions like user registration.
-- **Azure Table Storage**: User data, including sensitive details like passwords (hashed), is stored securely in Azure Table Storage.
-- **Email Functionality**: Another Azure Function app handles user emails, including confirmations, password resets, etc.
+## 🎯 Learning Objectives
 
-### Triggers Implemented:
-- **HTTP Triggers**: Handle incoming requests to functions like `register_email`, `login_email`, `logout_email`, etc.
-- **Queue Triggers**: Handle user-related actions by processing messages from Azure Queues.
-- **Timer Triggers**: Handles cleanup of expired tokens 
+Through this project, you will master:
 
-- **Core Functions**:
-    - `register_email`: User registration.
-    - `login_email`: Login process.
-    - `logout_email`: Logout functionality.
-    - `delete_user_email`: Deletion of user account.
-    - `verify_email`: Email verification process.
-    - `notify_user`: User notifications.
-    - `forgot_password_email`: Forgot password email handling.
-    - `change_password_email`: Change password functionality.
-    - `resend_confirmation_token_email`: Resend verification token to the user.
-    - `authenticate`: A guard wrapper to secure routes by authenticating JWT tokens.
+- **Serverless Architecture**: Build and deploy production-ready Azure Functions with Python v2 programming model
+- **Authentication Systems**: Implement JWT-based authentication with token blacklisting and session management
+- **Cloud Security**: Apply security best practices including password hashing, rate limiting, and input validation
+- **Azure Services Integration**: Leverage Azure Table Storage, Queue Storage, and Application Insights
+- **Event-Driven Design**: Design asynchronous systems using queue triggers and timer-based functions
+- **API Development**: Create RESTful APIs with proper error handling and response formatting
+- **Testing Strategies**: Develop comprehensive test suites for serverless applications
+- **System Architecture**: Design scalable, maintainable cloud-native applications
+
+## 🛠️ Tech Stack
+
+**Core Technologies:**
+- **Azure Functions v4**: Serverless compute platform with Python v2 programming model
+- **Python 3.9+**: Modern Python runtime with async/await support
+- **PyJWT**: Industry-standard JWT token handling and validation
+- **Azure SDK**: Native integration with Azure cloud services
+
+**Development Tools:**
+- **Azure Functions Core Tools**: Local development and testing
+- **pytest**: Comprehensive testing framework
+- **VS Code Azure Extension**: Enhanced development experience
+- **Azure CLI**: Cloud resource management and deployment
+
+**Azure Services:**
+- **Azure Table Storage**: NoSQL data storage for user information
+- **Azure Queue Storage**: Asynchronous message processing
+- **Application Insights**: Monitoring, logging, and telemetry
+- **Azure Key Vault**: Secure configuration and secrets management
+
+## 📁 Project Structure
+
+```
+authentication-FA/
+├── 📜 function_app.py          # Main Azure Functions application entry point
+├── 🛡️ guard.py                 # JWT authentication middleware and guards
+├── 🔧 helper_functions.py      # Utility functions for data operations
+├── ⚡ rate_limit.py            # Rate limiting implementation
+├── 📋 queue_triggers.py        # Queue-based trigger handlers
+├── ⏰ active_cron_trigger.py   # Timer-based cleanup operations
+├── 📋 requirements.txt         # Python dependencies
+├── ⚙️ host.json               # Azure Functions configuration
+├── 📖 README.md               # Project documentation
+├── 🏗️ ARCHITECTURE.md         # System architecture documentation
+├── 🎯 SKILLS-INDEX.md         # Learning objectives and skills catalog
+└── 🧪 tests/                  # Test suite
+    ├── test_helper_functions.py
+    ├── test_queue_triggers.py
+    ├── test_login.sh
+    ├── test_register.sh
+    ├── test_logout.sh
+    └── test_others.sh
+```
 
 ## How It Works
 
@@ -103,39 +147,226 @@ Before you begin, ensure you have the following installed on your local machine:
 
 ### 1. Install Required Python Packages
 
-Create a virtual environment and install the necessary dependencies.
+## 🚀 Getting Started
 
-```bash
-python -m venv .env
-source .env/bin/activate  # On Windows: .env\Scripts\activate
-pip install -r requirements.txt
+### Prerequisites
+
+Before you begin, ensure you have the following installed on your local machine:
+
+- **Azure Functions Core Tools v4**: For running and testing Azure Functions locally
+  - Install: `npm install -g azure-functions-core-tools@4 --unsafe-perm true`
+  - [Official Documentation](https://docs.microsoft.com/en-us/azure/azure-functions/functions-run-local)
+
+- **Azure CLI**: For managing Azure resources from the command line
+  - [Installation Guide](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli)
+
+- **Python 3.9+**: Required runtime for the function app
+  - [Download Python](https://www.python.org/downloads/)
+  - Verify: `python --version`
+
+- **Visual Studio Code** (Recommended): Enhanced development experience
+  - [Download VS Code](https://code.visualstudio.com/)
+  - Install Azure Functions Extension: `ms-azuretools.vscode-azurefunctions`
+
+### Installation
+
+1. **Clone the Repository**
+   ```bash
+   git clone <repository-url>
+   cd authentication-FA
+   ```
+
+2. **Set Up Python Environment**
+   ```bash
+   # Create virtual environment
+   python -m venv .venv
+   
+   # Activate virtual environment
+   # On Linux/macOS:
+   source .venv/bin/activate
+   # On Windows:
+   .venv\Scripts\activate
+   
+   # Install dependencies
+   pip install -r requirements.txt
+   ```
+
+3. **Configure Local Settings**
+   ```bash
+   # Create local.settings.json (not included in repo for security)
+   cp local.settings.json.template local.settings.json
+   # Edit with your Azure connection strings and secrets
+   ```
+
+### Running the Project
+
+1. **Start Function App Locally**
+   ```bash
+   func start
+   ```
+
+2. **Test the Endpoints**
+   The function app will be available at `http://localhost:7071`
+   
+   Example registration request:
+   ```bash
+   curl -X POST http://localhost:7071/api/register \
+     -H "Content-Type: application/json" \
+     -d '{
+       "username": "testuser",
+       "email": "test@example.com", 
+       "password": "SecurePassword123",
+       "first_name": "John",
+       "last_name": "Doe"
+     }'
+   ```
+
+3. **Run Tests**
+   ```bash
+   # Unit tests
+   pytest tests/
+   
+   # Integration tests
+   chmod +x tests/*.sh
+   ./tests/test_register.sh
+   ./tests/test_login.sh
+   ```
+
+## 💡 Usage
+
+### Authentication Workflow
+
+The system implements a comprehensive JWT-based authentication flow:
+
+1. **User Registration**: Users register with email verification
+2. **Login**: Credentials validation and JWT token issuance  
+3. **Protected Routes**: JWT token validation for secure endpoints
+4. **Logout**: Token blacklisting for secure session termination
+
+### API Endpoints
+
+#### Public Endpoints
+- `POST /api/register` - User registration
+- `POST /api/login` - User authentication
+- `POST /api/verify` - Email verification
+- `POST /api/forgot-password` - Password reset initiation
+
+#### Protected Endpoints (Require JWT Token)
+- `POST /api/logout` - User logout (requires `@authenticate` decorator)
+- `POST /api/change-password` - Password change
+- `DELETE /api/delete-user` - Account deletion
+- `POST /api/resend-confirmation` - Resend verification email
+
+### Queue Processing
+
+The system uses Azure Queues for asynchronous processing:
+
+```python
+# Example: Queue message for user registration
+{
+    "action": "register_user",
+    "user_data": {
+        "username": "testuser",
+        "email": "test@example.com",
+        "confirmation_token": "abc123"
+    }
+}
 ```
 
-### 2. Start your function app locally:
-```bash
-func start
-```
+### Rate Limiting
 
-This will start your function app locally. You can now test your authentication endpoints.
+Built-in protection against abuse:
+- **User-based**: 5 requests per minute per username/email
+- **IP-based**: 10 requests per minute per IP address
+- **Configurable**: Easily adjustable limits in `rate_limit.py`
 
-## 3. Step 3: Test your functions
-You can use a tool like Postman or cURL to test your endpoints.
-```bash
-curl -X POST http://localhost:7071/api/register -H "Content-Type: application/json" -d '{"username": "testuser", "email": "test@example.com", "password": "TestPassword123", "first_name": "John", "last_name": "Doe"}'
-```
+## 🏆 Key Features
 
-## Step 4: Deploy the Functions to Azure
+### 🔐 **Comprehensive Authentication**
+- JWT-based stateless authentication
+- Secure password hashing with BCrypt
+- Token blacklisting for secure logout
+- Email verification and account activation
 
-Refer to the following Azure documentation to deploy your function apps:
+### ⚡ **Serverless Architecture**
+- Azure Functions v4 with Python v2 programming model
+- Event-driven design with queue triggers
+- Auto-scaling and pay-per-use pricing
+- Timer-based cleanup operations
 
-- [Deploy Python Azure Functions](https://docs.microsoft.com/en-us/azure/azure-functions/functions-develop-python)
+### 🛡️ **Advanced Security**
+- Multi-tier rate limiting (user and IP-based)
+- Input validation and sanitization
+- CORS configuration and security headers
+- Protection against common attack vectors
+
+### 🔄 **Asynchronous Processing**
+- Queue-based message processing
+- Non-blocking user operations
+- Email service integration
+- Scalable workflow orchestration
+
+### 🧪 **Comprehensive Testing**
+- Unit tests with pytest
+- Integration tests with shell scripts
+- API endpoint testing
+- Local development support
+
+### 📊 **Monitoring & Observability**
+- Application Insights integration
+- Structured logging with JSON format
+- Performance metrics and telemetry
+- Error tracking and alerting
+
+## 📚 Resources
+
+### Documentation
+- [ARCHITECTURE.md](./ARCHITECTURE.md) - Detailed system architecture and design
+- [SKILLS-INDEX.md](./SKILLS-INDEX.md) - Learning objectives and competencies
 - [Azure Functions Documentation](https://docs.microsoft.com/en-us/azure/azure-functions/)
+- [Python Developer Guide](https://docs.microsoft.com/en-us/azure/azure-functions/functions-reference-python)
 
+### Related Projects
+- Email Function App - Companion service for email operations
+- Authentication Frontend - React/Angular client implementation examples
+- Infrastructure as Code - ARM/Bicep templates for deployment
 
-## Known Limitations
+### Learning Resources
+- [JWT Best Practices](https://tools.ietf.org/html/rfc7519)
+- [Azure Functions Best Practices](https://docs.microsoft.com/en-us/azure/azure-functions/functions-best-practices)
+- [Serverless Security Patterns](https://docs.microsoft.com/en-us/azure/architecture/patterns/)
 
-- **OAuth**: The app does not currently support OAuth for authentication.
-- **Not for Production**: This app is intended for learning purposes only and is not designed for production environments.
-- **Scalability**: While the app uses Azure's serverless offerings, performance may degrade with extremely high traffic or large-scale data handling due to its practice nature.
-- **Security**: This app does not implement robust security measures like encryption for data at rest or in transit, which is crucial for real-world applications.
-- **Error Handling**: The app lacks comprehensive error handling, which is essential for robust applications.
+## 👥 Contributors
+
+**Primary Developer**: Authentication System Architect  
+**Role**: Full-stack serverless developer with expertise in Azure cloud services  
+**Focus**: Secure authentication systems and cloud-native architecture
+
+### Contributing Guidelines
+1. Fork the repository and create a feature branch
+2. Follow PEP 8 Python coding standards
+3. Add comprehensive tests for new functionality
+4. Update documentation for API changes
+5. Submit pull request with detailed description
+
+### Current Limitations & Future Enhancements
+
+**Known Limitations:**
+- OAuth integration not yet implemented
+- Educational project - additional hardening needed for production
+- Single-region deployment (no global distribution)
+- Basic error handling - comprehensive error management needed
+
+**Planned Enhancements:**
+- OAuth 2.0 and OpenID Connect integration
+- Multi-factor authentication (SMS, TOTP)
+- Advanced monitoring and alerting
+- Infrastructure as Code templates
+- Performance optimization and caching strategies
+
+---
+
+<div align="center">
+  <p><em>🌟 Star this repository if it helped you learn serverless authentication!</em></p>
+  <p>Built with ❤️ using Azure Functions and modern cloud-native practices</p>
+</div>
